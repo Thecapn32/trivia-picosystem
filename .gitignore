@@ -1,1 +1,4 @@
 build/
+a.out
+test.cpp
+.vscode/
