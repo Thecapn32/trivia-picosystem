@@ -1,5 +1,7 @@
 #include "picosystem.hpp"
-#include "rand.h"
+#include <time.h>
+#include <cstring>
+#include <random>
 
 #include "questions.hpp"
 
@@ -15,6 +17,7 @@ enum state_t {
 enum action_t {
 	UPDATE_MENU,
 	UPDATE_TRIVIA,
+	ANSWER_TRIVIA,
 	UPDATE_SCORE_BOARD,
 	UPDATE_HISTORY,
 	IDLE,
@@ -28,7 +31,7 @@ static int selected_menu = 1;
 static int selected_trivia = 1;
 
 static enum state_t state = MENU;
-static enum action_t action = IDLE:
+static enum action_t action = UPDATE_MENU;
 
 int search(int arr[10], int value)
 {
@@ -42,16 +45,16 @@ int search(int arr[10], int value)
 
 void select_new_questions()
 {
-	memset(&select_new_questions, -1, sizeof(select_new_questions));
-	int rand;
+	memset(&selected_questions, -1, sizeof(selected_questions));
+	int random;
 	for (int i = 0; i < 10; i++)
     {
-		rand = get_rand_32() % 100;
-        while (search(selected_questions, rand))
+		random = rand() % 100;
+        while (search(selected_questions, random))
         {
-            rand = get_rand_32() % 100;
+            random = rand() % 100;
         }
-        selected_questions[i] = rand;
+        selected_questions[i] = random;
     }
 }
 
@@ -59,94 +62,32 @@ void init() {
 	select_new_questions();
 }
 
-void update_menu() {
-	if (pressed(UP)) {
-		selected_menu--;
-		if (selected_menu == 0)
-			selected_menu = 1;
-		action = UPDATE_MENU;
-		break;
-	}
-	if (pressed(DOWN)) {
-		selected_menu++;
-		if (selected_menu == 5)
-			selected_menu = 4;
-		action = UPDATE_MENU;
-		break;
-	}
-	action = IDLE;
-}
-
-void update_trivia(uint32_t tick) {
-	if (pressed(UP)) {
-		selected_trivia--;
-		if (selected_trivia == 0)
-			selected_trivia = 1;
-		action = UPDATE_TRIVIA;
-		return;
-	}
-	if (pressed(DOWN)) {
-		selected_trivia++;
-		if (selected_trivia == 5)
-			selected_trivia = 4;
-		action = UPDATE_TRIVIA;
-		return;
-	}
-	action = IDLE;
-}
-
 void update(uint32_t tick) {
-	uint32_t last_tick = 0;
 
-	switch (state)
-	{
-	case MENU: {
+	static uint32_t last_tick = 0;
+
+	if (state == MENU) {
 		if (pressed(X)) {
 			if(selected_menu == 1) {
-				last_tick = tick;
 				state = TRIVIA;
 				action = UPDATE_TRIVIA;
-				break;
 			}
-		}
-		if (pressed(UP)) {
-		selected_menu--;
-		if (selected_menu == 0)
-			selected_menu = 1;
-		action = UPDATE_MENU;
-		break;
-		}
-		if (pressed(DOWN)) {
+		} else if (pressed(UP)) {
+			selected_menu--;
+			if (selected_menu == 0)
+				selected_menu = 1;
+			action = UPDATE_MENU;
+		} else if (pressed(DOWN)) {
 			selected_menu++;
 			if (selected_menu == 5)
 				selected_menu = 4;
 			action = UPDATE_MENU;
-			break;
 		}
-		action = IDLE;
-		break;
-	}
-	case TRIVIA: {
-		if (tick - last_tick > 700) {
-			index_question++;
-			if (index_question > 10) {
-				index_question = 0;
-				action = UPDATE_MENU;
-				state = MENU;
-			} else {
-				action = UPDATE_TRIVIA;
-			}
-		} else {
+	} else if (state == TRIVIA) {
+		if(action == IDLE) {
 			if (pressed(X)) {
-				index_question++;
-				if (index_question > 10) {
-					index_question = 0;
-					action = UPDATE_MENU;
-					state = MENU;
-				} else {
-					last_tick = tick;
-					action = UPDATE_TRIVIA;
-				}
+				action = ANSWER_TRIVIA;
+				last_tick = tick;
 			} else if (pressed(UP)) {
 				selected_trivia--;
 				if (selected_trivia == 0)
@@ -157,14 +98,20 @@ void update(uint32_t tick) {
 				if (selected_trivia == 5)
 					selected_trivia = 4;
 				action = UPDATE_TRIVIA;
-			} else {
-				action = IDLE;
 			}
-		}
-		break;
-	}
-	default:
-		break;
+		} else if (action == ANSWER_TRIVIA) {
+			if ((tick - last_tick) / CLOCKS_PER_SEC > 5) {
+				index_question++;
+				if (index_question >= 10) {
+					index_question = 0;
+					action = UPDATE_MENU;
+					state = MENU;
+				}
+				action = UPDATE_TRIVIA;
+			}
+		} 
+	} else {
+		action = IDLE;
 	}
 }
 
@@ -189,15 +136,60 @@ void draw_menu()
 			break;
 	}
 	std::string message = "Welcome" + item1 + item2 + item3 + item4;
+	pen(12, 12, 12);
+	text(message, 2, 16, 116);
+}
+
+void draw_trivia_answer()
+{
+	std::string opa = "\n\n    " + answers[selected_questions[index_question]][0];
+	std::string opb = "\n\n    " + answers[selected_questions[index_question]][1];
+	std::string opc = "\n\n    " + answers[selected_questions[index_question]][2];
+	std::string opd = "\n\n    " + answers[selected_questions[index_question]][3];
+
+	if (key[selected_questions[index_question]] != selected_trivia) {
+		switch (selected_trivia) {
+			case 1:
+				opa += "  X";
+				break;
+			case 2:
+				opb += "  X";
+				break;
+			case 3:
+				opc += "  X";
+				break;
+			case 4:
+				opd += "  X";
+				break;
+		}
+	}
+	switch (key[selected_questions[index_question]]) {
+			case 1:
+				opa += "  ✓";
+				break;
+			case 2:
+				opb += "  ✓";
+				break;
+			case 3:
+				opc += "  ✓";
+				break;
+			case 4:
+				opd += "  ✓";
+				break;
+		}
+	std::string message = questions[selected_questions[index_question]] + opa + opb + opc + opd;
+
+	pen(12, 12, 12);
+	text(message, 2, 16, 116);
 }
 
 void draw_trivia()
 {
-	std::string opa = "\n\n    A) Option A";
-	std::string opb = "\n\n    B) Option B";
-	std::string opc = "\n\n    C) Option C";
-	std::string opd = "\n\n    D) Option D";
-	switch (selected_menu) {
+	std::string opa = "\n\n    " + answers[selected_questions[index_question]][0];
+	std::string opb = "\n\n    " + answers[selected_questions[index_question]][1];
+	std::string opc = "\n\n    " + answers[selected_questions[index_question]][2];
+	std::string opd = "\n\n    " + answers[selected_questions[index_question]][3];
+	switch (selected_trivia) {
 		case 1:
 			opa += "  \\spr001";
 			break;
@@ -211,7 +203,7 @@ void draw_trivia()
 			opd += "  \\spr001";
 			break;
 	}
-	std::string message = "What is the question?" + opa + opb + opc + opd;
+	std::string message = questions[selected_questions[index_question]] + opa + opb + opc + opd;
 
 	pen(12, 12, 12);
 	text(message, 2, 16, 116);
@@ -225,15 +217,18 @@ void draw(uint32_t tick) {
 		pen(0, 0, 0);
 		clear();
 		draw_menu();
+		action = IDLE;
 		break;
 	case UPDATE_TRIVIA:
 		pen(0, 0, 0);
 		clear();
 		draw_trivia();
+		action = IDLE;
 		break;
-	default:
-		action = UPDATE_MENU;
-		state = MENU;
+	case ANSWER_TRIVIA:
+		pen(0, 0, 0);
+		clear();
+		draw_trivia_answer();
 		break;
 	}
 	
